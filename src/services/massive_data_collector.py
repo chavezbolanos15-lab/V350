@@ -23,7 +23,7 @@ from services.auto_save_manager import salvar_etapa, salvar_erro
 from services.search_api_manager import search_api_manager
 from services.trendfinder_client import trendfinder_client
 from services.supadata_mcp_client import supadata_client
-from services.visual_content_capture import visual_content_capture
+# from services.visual_content_capture import visual_content_capture  # Removido - não utilizado
 
 logger = logging.getLogger(__name__)
 

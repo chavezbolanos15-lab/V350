@@ -1,6 +1,7 @@
 """
 Sistema Avançado de Rotação de APIs - V3.0
 Garante alta disponibilidade com fallback automático entre múltiplas APIs
+ATUALIZADO: Implementa fallbacks Jina->EXA, Qwen->Gemini, Supadata para insights sociais
 """
 
 import os
@@ -14,6 +15,8 @@ import json
 from datetime import datetime, timedelta
 import threading
 import requests
+import asyncio
+import aiohttp
 from dotenv import load_dotenv
 
 # Carregar variáveis de ambiente
@@ -53,10 +56,26 @@ class EnhancedAPIRotationManager:
             'qwen': [],
             'gemini': [],
             'groq': [],
-            'tavily': [],
+            'openai': [],
+            'deepseek': [],
+            'jina': [],
             'exa': [],
-            'serpapi': [],
+            'serper': [],
+            'tavily': [],
+            'supadata': [],
+            'firecrawl': [],
+            'scrapingant': [],
             'youtube': []
+        }
+        
+        # Definir cadeias de fallback (cada grupo é uma prioridade)
+        self.fallback_chains = {
+            'ai_models': [['qwen'], ['gemini'], ['openai'], ['groq'], ['deepseek']],
+            'search': [['jina'], ['exa'], ['serper'], ['firecrawl'], ['tavily']],
+            'social_insights': [['supadata'], ['serper'], ['firecrawl'], ['tavily']],
+            'web_scraping': [['firecrawl'], ['scrapingant'], ['jina'], ['serper']],
+            'content_extraction': [['firecrawl'], ['jina'], ['scrapingant'], ['serper']],
+            'url_analysis': [['firecrawl'], ['jina'], ['exa'], ['serper']]
         }
         self.current_api_index = {}
         self.lock = threading.Lock()
@@ -69,30 +88,30 @@ class EnhancedAPIRotationManager:
     def _load_api_configurations(self):
         """Carrega configurações de APIs do .env"""
         try:
-            # Qwen (OpenRouter) - Usar as chaves reais
+            # Qwen (OpenRouter) - Usar as chaves reais do .env
             openrouter_keys = [
-                os.getenv('OPENROUTER_API_KEY'),
+                os.getenv('OPENROUTER_API_KEY_3'),
                 os.getenv('OPENROUTER_API_KEY_1'),
                 os.getenv('OPENROUTER_API_KEY_2')
             ]
             
             for i, key in enumerate(openrouter_keys, 1):
-                if key and key not in ['your_openrouter_key_1', 'your_openrouter_key_2', None]:
+                if key:
                     self.apis['qwen'].append(APIEndpoint(
                         name=f"qwen_{i}",
                         api_key=key,
-                        base_url=os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+                        base_url='https://openrouter.ai/api/v1',
                         max_requests_per_minute=100
                     ))
             
-            # Gemini - Usar as chaves reais
+            # Gemini - Usar as chaves reais do .env
             gemini_keys = [
-                os.getenv('GEMINI_API_KEY'),
-                os.getenv('GEMINI_API_KEY_1')
+                os.getenv('GEMINI_API_KEY_1'),
+                os.getenv('GEMINI_API_KEY_2')
             ]
             
             for i, key in enumerate(gemini_keys, 1):
-                if key and key not in ['your_gemini_key_1', 'your_gemini_key_2', None]:
+                if key:
                     self.apis['gemini'].append(APIEndpoint(
                         name=f"gemini_{i}",
                         api_key=key,
@@ -100,14 +119,94 @@ class EnhancedAPIRotationManager:
                         max_requests_per_minute=60
                     ))
             
-            # Groq - Usar as chaves reais
+            # OpenAI
+            openai_key = os.getenv('OPENAI_API_KEY')
+            if openai_key:
+                self.apis['openai'].append(APIEndpoint(
+                    name="openai_1",
+                    api_key=openai_key,
+                    base_url="https://api.openai.com/v1",
+                    max_requests_per_minute=60
+                ))
+            
+            # DeepSeek
+            deepseek_key = os.getenv('DEEPSEEK_API_KEY')
+            if deepseek_key:
+                self.apis['deepseek'].append(APIEndpoint(
+                    name="deepseek_1",
+                    api_key=deepseek_key,
+                    base_url="https://api.deepseek.com",
+                    max_requests_per_minute=60
+                ))
+            
+            # Jina AI - Primário para busca
+            jina_keys = [
+                os.getenv('JINA_API_KEY_1'),
+                os.getenv('JINA_API_KEY_2')
+            ]
+            
+            for i, key in enumerate(jina_keys, 1):
+                if key:
+                    self.apis['jina'].append(APIEndpoint(
+                        name=f"jina_{i}",
+                        api_key=key,
+                        base_url="https://r.jina.ai",
+                        max_requests_per_minute=200
+                    ))
+            
+            # EXA - Fallback para Jina
+            exa_keys = [
+                os.getenv('EXA_API_KEY_1'),
+                os.getenv('EXA_API_KEY_2')
+            ]
+            
+            for i, key in enumerate(exa_keys, 1):
+                if key:
+                    self.apis['exa'].append(APIEndpoint(
+                        name=f"exa_{i}",
+                        api_key=key,
+                        base_url="https://api.exa.ai",
+                        max_requests_per_minute=100
+                    ))
+            
+            # Serper - Substituto secundário
+            serper_keys = [
+                os.getenv('SERPER_API_KEY_1'),
+                os.getenv('SERPER_API_KEY_2')
+            ]
+            
+            for i, key in enumerate(serper_keys, 1):
+                if key:
+                    self.apis['serper'].append(APIEndpoint(
+                        name=f"serper_{i}",
+                        api_key=key,
+                        base_url="https://google.serper.dev",
+                        max_requests_per_minute=100
+                    ))
+            
+            # Supadata - Para insights de redes sociais
+            supadata_keys = [
+                os.getenv('SUPADATA_API_KEY_1'),
+                os.getenv('SUPADATA_API_KEY_2')
+            ]
+            
+            for i, key in enumerate(supadata_keys, 1):
+                if key:
+                    self.apis['supadata'].append(APIEndpoint(
+                        name=f"supadata_{i}",
+                        api_key=key,
+                        base_url=os.getenv('SUPADATA_API_URL', 'https://api.supadata.ai/v1'),
+                        max_requests_per_minute=50
+                    ))
+            
+            # Groq
             groq_keys = [
                 os.getenv('GROQ_API_KEY'),
                 os.getenv('GROQ_API_KEY_1')
             ]
             
             for i, key in enumerate(groq_keys, 1):
-                if key and key not in ['your_groq_key_1', 'your_groq_key_2', None]:
+                if key:
                     self.apis['groq'].append(APIEndpoint(
                         name=f"groq_{i}",
                         api_key=key,
@@ -117,7 +216,7 @@ class EnhancedAPIRotationManager:
             
             # Tavily
             tavily_key = os.getenv('TAVILY_API_KEY')
-            if tavily_key and tavily_key not in ['your_tavily_key_1', None]:
+            if tavily_key:
                 self.apis['tavily'].append(APIEndpoint(
                     name="tavily_1",
                     api_key=tavily_key,
@@ -125,34 +224,34 @@ class EnhancedAPIRotationManager:
                     max_requests_per_minute=100
                 ))
             
-            # EXA
-            exa_keys = [
-                os.getenv('EXA_API_KEY'),
-                os.getenv('EXA_API_KEY_1')
+            # Firecrawl
+            firecrawl_keys = [
+                os.getenv('FIRECRAWL_API_KEY_1'),
+                os.getenv('FIRECRAWL_API_KEY_2')
             ]
             
-            for i, key in enumerate(exa_keys, 1):
-                if key and key not in ['your_exa_key_1', None]:
-                    self.apis['exa'].append(APIEndpoint(
-                        name=f"exa_{i}",
+            for i, key in enumerate(firecrawl_keys, 1):
+                if key:
+                    self.apis['firecrawl'].append(APIEndpoint(
+                        name=f"firecrawl_{i}",
                         api_key=key,
-                        base_url="https://api.exa.ai",
-                        max_requests_per_minute=100
+                        base_url="https://api.firecrawl.dev",
+                        max_requests_per_minute=60
                     ))
             
-            # SerpAPI (usando Serper)
-            serper_key = os.getenv('SERPER_API_KEY')
-            if serper_key and serper_key not in ['your_serpapi_key_1', None]:
-                self.apis['serpapi'].append(APIEndpoint(
-                    name="serper_1",
-                    api_key=serper_key,
-                    base_url="https://google.serper.dev/search",
-                    max_requests_per_minute=100
+            # ScrapingAnt
+            scrapingant_key = os.getenv('SCRAPINGANT_API_KEY')
+            if scrapingant_key:
+                self.apis['scrapingant'].append(APIEndpoint(
+                    name="scrapingant_1",
+                    api_key=scrapingant_key,
+                    base_url="https://api.scrapingant.com",
+                    max_requests_per_minute=60
                 ))
             
             # YouTube
             youtube_key = os.getenv('YOUTUBE_API_KEY')
-            if youtube_key and youtube_key not in ['your_youtube_key_1', None]:
+            if youtube_key:
                 self.apis['youtube'].append(APIEndpoint(
                     name="youtube_1",
                     api_key=youtube_key,
@@ -288,24 +387,67 @@ class EnhancedAPIRotationManager:
                     logger.warning(f"⚠️ API {api_name} rate limited até {api.rate_limit_reset}")
                     break
     
-    def get_fallback_model(self, primary_service: str) -> Tuple[str, Optional[APIEndpoint]]:
+    def get_fallback_api(self, service_type: str, failed_service: str = None) -> Optional[APIEndpoint]:
         """
-        Retorna modelo de fallback quando o primário falha
+        Retorna API de fallback baseada nas cadeias configuradas
         """
-        fallback_order = {
-            'qwen': ['gemini', 'groq'],
-            'gemini': ['qwen', 'groq'],
-            'groq': ['qwen', 'gemini']
-        }
+        if service_type not in self.fallback_chains:
+            logger.warning(f"⚠️ Tipo de serviço desconhecido: {service_type}")
+            return None
         
-        for fallback_service in fallback_order.get(primary_service, []):
-            api = self.get_active_api(fallback_service)
-            if api:
-                logger.info(f"🔄 Fallback de {primary_service} para {fallback_service}")
-                return fallback_service, api
+        chain = self.fallback_chains[service_type]
         
-        logger.error(f"❌ Nenhum fallback disponível para {primary_service}")
-        return None, None
+        # Se um serviço específico falhou, começar do próximo na cadeia
+        start_index = 0
+        if failed_service:
+            for i, services in enumerate(chain):
+                if failed_service in services:
+                    start_index = i + 1
+                    break
+        
+        # Percorrer cadeia de fallback a partir do índice calculado
+        for i in range(start_index, len(chain)):
+            for service_name in chain[i]:
+                if service_name in self.apis and self.apis[service_name]:
+                    # Usar get_active_api para obter API disponível
+                    api = self.get_active_api(service_name)
+                    if api:
+                        logger.info(f"🔄 Fallback para {service_name} (tipo: {service_type})")
+                        return api
+        
+        logger.error(f"❌ Nenhum fallback disponível para {service_type}")
+        return None
+
+    def get_api_with_fallback(self, service_type: str) -> Optional[APIEndpoint]:
+        """
+        Obtém API com fallback automático
+        """
+        # Tentar obter API primária
+        api = self.get_active_api_by_type(service_type)
+        if api:
+            return api
+        
+        # Se falhou, tentar fallback
+        return self.get_fallback_api(service_type)
+
+    def get_active_api_by_type(self, service_type: str) -> Optional[APIEndpoint]:
+        """
+        Obtém API ativa baseada no tipo de serviço
+        """
+        if service_type not in self.fallback_chains:
+            return None
+        
+        # Tentar primeiro serviço da cadeia
+        primary_services = self.fallback_chains[service_type][0]
+        
+        for service_name in primary_services:
+            if service_name in self.apis and self.apis[service_name]:
+                # Usar o método get_active_api existente
+                api = self.get_active_api(service_name)
+                if api:
+                    return api
+        
+        return None
     
     def get_api_status_report(self) -> Dict[str, Any]:
         """Retorna relatório de status das APIs"""

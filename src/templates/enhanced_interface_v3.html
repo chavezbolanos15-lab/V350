@@ -769,7 +769,6 @@
 
         <!-- Action Buttons -->
         <div class="btn-group">
-            <button class="btn btn-primary" id="startCompleteWorkflowBtn" onclick="startCompleteWorkflow()">
                 <i class="fas fa-play"></i>
                 <span>Executar Workflow Completo</span>
                 <div class="loading-spinner" style="display: none;"></div>
@@ -820,7 +819,6 @@
             document.addEventListener('keydown', function(e) {
                 if (e.ctrlKey && e.key === 'Enter') {
                     e.preventDefault();
-                    startCompleteWorkflow();
                 }
             });
         }
@@ -938,7 +936,6 @@
             }
         }
         
-        async function startCompleteWorkflow() {
             try {
                 if (!validateForm()) {
                     showNotification('Por favor, preencha pelo menos o segmento', 'warning');
@@ -948,10 +945,8 @@
                 const formData = getFormData();
                 
                 showProgress(true);
-                updateProgress(0, 'Iniciando workflow completo...', 5);
                 
                 // Desabilita botão
-                const btn = document.getElementById('startCompleteWorkflowBtn');
                 btn.disabled = true;
                 btn.querySelector('.loading-spinner').style.display = 'inline-block';
                 
@@ -976,11 +971,9 @@
                 }
                 
             } catch (error) {
-                console.error('Erro no workflow completo:', error);
                 showNotification(`Erro no workflow: ${error.message}`, 'error');
                 
                 // Reabilita botão
-                const btn = document.getElementById('startCompleteWorkflowBtn');
                 btn.disabled = false;
                 btn.querySelector('.loading-spinner').style.display = 'none';
                 
@@ -1108,7 +1101,6 @@
                         showResults();
                         
                         // Reabilita botão
-                        const btn = document.getElementById('startCompleteWorkflowBtn');
                         btn.disabled = false;
                         btn.querySelector('.loading-spinner').style.display = 'none';
                         
@@ -1372,7 +1364,6 @@
                 // Reset buttons
                 document.getElementById('step2Btn').disabled = true;
                 document.getElementById('step3Btn').disabled = true;
-                document.getElementById('startCompleteWorkflowBtn').disabled = false;
                 
                 showNotification('Workflow resetado', 'info');
             }

@@ -170,12 +170,57 @@ class EnhancedAIManager:
         prompt: str,
         context: str = "",
         session_id: str = None,
-        max_search_iterations: int = 3
+        max_search_iterations: int = 3,
+        study_time_minutes: int = 5
     ) -> str:
         """
         Gera conteúdo com busca ativa - IA pode buscar informações online
         """
-        logger.info("🔍 Iniciando geração com busca ativa")
+        logger.info(f"🔍 Iniciando geração com busca ativa - Tempo de estudo: {study_time_minutes} min")
+        
+        # FASE DE ESTUDO PROFUNDO
+        if context and len(context) > 10000:  # Se há muito contexto para estudar
+            logger.info(f"📚 INICIANDO FASE DE ESTUDO PROFUNDO - {study_time_minutes} minutos")
+            study_start = datetime.now()
+            
+            # Divide o contexto em chunks para análise profunda
+            chunk_size = 8000
+            context_chunks = [context[i:i+chunk_size] for i in range(0, len(context), chunk_size)]
+            
+            study_insights = []
+            for i, chunk in enumerate(context_chunks[:10]):  # Máximo 10 chunks
+                logger.info(f"📖 Analisando chunk {i+1}/{min(len(context_chunks), 10)}")
+                
+                study_prompt = f"""
+                ANÁLISE PROFUNDA E APRENDIZADO:
+                
+                Analise profundamente este conteúdo e extraia:
+                1. Insights únicos e padrões ocultos
+                2. Tendências emergentes
+                3. Oportunidades não óbvias
+                4. Conexões entre diferentes informações
+                5. Previsões baseadas nos dados
+                
+                CONTEÚDO PARA ANÁLISE:
+                {chunk}
+                
+                Seja extremamente analítico e perspicaz. Vá além do óbvio.
+                """
+                
+                try:
+                    insight = await self.generate_text(study_prompt)
+                    if insight and len(insight) > 100:
+                        study_insights.append(insight)
+                except Exception as e:
+                    logger.warning(f"⚠️ Erro na análise do chunk {i+1}: {e}")
+            
+            # Consolida insights do estudo
+            if study_insights:
+                consolidated_study = "\n\n".join(study_insights)
+                context = f"{context}\n\nINSIGHTS DO ESTUDO PROFUNDO:\n{consolidated_study}"
+                
+            study_duration = (datetime.now() - study_start).total_seconds() / 60
+            logger.info(f"✅ Estudo profundo concluído em {study_duration:.1f} minutos")
 
         # Tenta Qwen/OpenRouter primeiro para geração com busca ativa
         if "openrouter" in self.providers and self.providers["openrouter"]["available"]:

@@ -13,8 +13,10 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 from services.massive_data_collector import massive_data_collector
 from services.enhanced_module_processor import enhanced_module_processor
-from services.comprehensive_report_generator_v3 import comprehensive_report_generator_v3
+# from services.comprehensive_report_generator_v3 import comprehensive_report_generator_v3  # Removido - não utilizado
 from services.auto_save_manager import salvar_etapa, salvar_erro
+
+logger = logging.getLogger(__name__)
 
 # Import do serviço preditivo
 try:
@@ -23,8 +25,6 @@ try:
 except ImportError:
     HAS_PREDICTIVE_SERVICE = False
     logger.warning("⚠️ Serviço preditivo não disponível")
-
-logger = logging.getLogger(__name__)
 
 class MasterAnalysisOrchestrator:
     """Orquestrador mestre para nova metodologia aprimorada"""

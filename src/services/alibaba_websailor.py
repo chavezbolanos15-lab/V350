@@ -75,7 +75,7 @@ class AlibabaWebSailorAgent:
         self, 
         query: str, 
         context: Dict[str, Any],
-        max_pages: int = 25,
+        max_pages: int = 100,
         depth_levels: int = 3,
         session_id: str = None
     ) -> Dict[str, Any]:
@@ -105,7 +105,7 @@ class AlibabaWebSailorAgent:
             for engine_name, search_func in search_engines:
                 try:
                     logger.info(f"🔍 Executando {engine_name}...")
-                    results = search_func(query, max_pages // len(search_engines))
+                    results = search_func(query, min(20, max_pages // len(search_engines)))
                     if results:
                         search_engines_used.append(engine_name)
                         logger.info(f"✅ {engine_name}: {len(results)} resultados")
@@ -418,7 +418,6 @@ class AlibabaWebSailorAgent:
         strategies = [
             ("Jina Reader", self._extract_with_jina),
             ("Trafilatura", self._extract_with_trafilatura),
-            ("Readability", self._extract_with_readability),
             ("BeautifulSoup", self._extract_with_beautifulsoup)
         ]
         for strategy_name, strategy_func in strategies:
@@ -487,10 +486,9 @@ class AlibabaWebSailorAgent:
         except Exception as e:
             logger.error(f"❌ Erro no Trafilatura para {url}: {str(e)}")
             return None
-    def _extract_with_readability(self, url: str) -> Optional[str]:
-        """Extrai usando Readability"""
+    def _extract_with_(self, url: str) -> Optional[str]:
         try:
-            from readability import Document
+            from  import Document
             response = self.session.get(url, timeout=20)
             if response.status_code == 200:
                 doc = Document(response.content)
@@ -502,7 +500,6 @@ class AlibabaWebSailorAgent:
         except ImportError:
             return None
         except Exception as e:
-            logger.error(f"❌ Erro no Readability para {url}: {str(e)}")
             return None
     def _extract_with_beautifulsoup(self, url: str) -> Optional[str]:
         """Extrai usando BeautifulSoup"""

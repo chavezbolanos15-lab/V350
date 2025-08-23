@@ -47,18 +47,36 @@ class DeepAIAnalysisEngine:
     através de estudo intensivo dos dados coletados
     """
     
-    def __init__(self):
+    def __init__(self, study_time_minutes: int = 5):
         self.api_manager = get_api_manager()
         self.study_sessions = {}
         self.expertise_cache = {}
         self.analysis_threads = {}
+        self.default_study_time = study_time_minutes
+        
+        # Configurações de estudo
+        self.study_config = {
+            'min_study_time': 2,  # mínimo 2 minutos
+            'max_study_time': 10,  # máximo 10 minutos
+            'default_study_time': study_time_minutes,
+            'deep_analysis_threshold': 0.8,  # quando fazer análise mais profunda
+            'expertise_threshold': 0.85  # nível mínimo para ser considerado expert
+        }
         self.min_study_time = 5  # 5 minutos mínimo
     
     async def initiate_deep_study(self, session_id: str, topic: str, 
-                                 data_directory: str, study_minutes: int = 5) -> StudySession:
+                                 data_directory: str, study_minutes: int = None) -> StudySession:
         """
         Inicia sessão de estudo profundo da IA
         """
+        # Define tempo de estudo
+        if study_minutes is None:
+            study_minutes = self.default_study_time
+        
+        # Garante tempo mínimo
+        study_minutes = max(study_minutes, self.study_config['min_study_time'])
+        study_minutes = min(study_minutes, self.study_config['max_study_time'])
+        
         logger.info(f"🧠 Iniciando estudo profundo: {topic} por {study_minutes} minutos")
         
         # Carregar todos os dados disponíveis

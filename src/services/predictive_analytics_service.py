@@ -26,8 +26,18 @@ class PredictiveAnalyticsService:
     
     def __init__(self):
         """Inicializa o serviço de análise preditiva"""
-        self.engine = PredictiveAnalyticsEngine()
+        try:
+            self.engine = PredictiveAnalyticsEngine()
+            self.available = True
+        except Exception as e:
+            logger.warning(f"⚠️ Erro ao inicializar engine preditivo: {e}")
+            self.engine = None
+            self.available = False
         logger.info("🔮 Predictive Analytics Service inicializado")
+    
+    def is_available(self) -> bool:
+        """Verifica se o serviço está disponível"""
+        return self.available and self.engine is not None
     
     async def analyze_session(self, session_id: str) -> Dict[str, Any]:
         """

@@ -1,6 +1,7 @@
 """
 Sistema de Busca Massiva de Redes Sociais - V3.0
 Extração completa de dados de Instagram, Facebook, YouTube com análise de engajamento
+ATUALIZADO: Usando Playwright + Chromium (Selenium removido)
 """
 
 import os
@@ -18,15 +19,14 @@ import re
 from PIL import Image
 import io
 import base64
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import instaloader
 from googleapiclient.discovery import build
-from enhanced_api_rotation_manager import get_api_manager
+try:
+    from enhanced_api_rotation_manager import get_api_manager
+except ImportError:
+    get_api_manager = None
+from services.playwright_social_extractor import PlaywrightSocialExtractor, extract_viral_content_massive
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ class MassiveSocialSearchEngine:
     """
     
     def __init__(self):
-        self.api_manager = get_api_manager()
+        self.api_manager = get_api_manager() if get_api_manager else None
         self.session_data = {}
         self.driver = None
         self.insta_loader = None
@@ -103,57 +103,134 @@ class MassiveSocialSearchEngine:
             if youtube_api:
                 self.youtube_service = build('youtube', 'v3', developerKey=youtube_api.api_key)
             
-            # Selenium para Facebook e outras plataformas
-            self._setup_selenium()
+            # Playwright para extração de redes sociais
+            self.playwright_extractor = PlaywrightSocialExtractor()
             
-            logger.info("✅ Serviços de redes sociais configurados")
+            logger.info("✅ Serviços de redes sociais configurados com Playwright")
             
         except Exception as e:
             logger.error(f"❌ Erro ao configurar serviços: {e}")
     
-    def _setup_selenium(self):
-        """Configura Selenium para scraping"""
-        try:
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--window-size=1920,1080')
-            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
-            
-            self.driver = webdriver.Chrome(options=chrome_options)
-            logger.info("✅ Selenium configurado")
-            
-        except Exception as e:
-            logger.error(f"❌ Erro ao configurar Selenium: {e}")
-    
+    async def massive_search_playwright(self, query: str, platforms: List[str] = None) -> Dict[str, Any]:
+        """
+        Executa busca massiva usando Playwright (NOVO MÉTODO)
+        """
+        if platforms is None:
+            platforms = ['instagram', 'facebook', 'youtube', 'tiktok']
+        
+        logger.info(f"🎭 Iniciando busca massiva com Playwright: '{query}' em {platforms}")
+        
+        # Usar o novo extrator Playwright
+        search_terms = [query] if isinstance(query, str) else query
+        content = await extract_viral_content_massive(search_terms)
+        
+        return content
+
     async def massive_search(self, query: str, platforms: List[str] = None, 
                            min_engagement: int = 100, max_results: int = 1000) -> SearchResults:
         """
-        Executa busca massiva em múltiplas plataformas
+        Executa busca massiva em múltiplas plataformas (MÉTODO LEGADO)
         """
         if platforms is None:
             platforms = ['instagram', 'youtube', 'facebook']
         
         logger.info(f"🚀 Iniciando busca massiva: '{query}' em {platforms}")
         
+        # USAR NOVO MÉTODO PLAYWRIGHT
+        playwright_results = await self.massive_search_playwright(query, platforms)
+        
+        # Converter resultados para formato legado se necessário
         all_posts = []
-        all_profiles = []
-        platform_counts = {}
+        platform_counts = {
+            'instagram': playwright_results.get('extraction_summary', {}).get('instagram_count', 0),
+            'facebook': playwright_results.get('extraction_summary', {}).get('facebook_count', 0),
+            'youtube': playwright_results.get('extraction_summary', {}).get('youtube_count', 0),
+            'tiktok': playwright_results.get('extraction_summary', {}).get('tiktok_count', 0)
+        }
         
-        # Busca paralela em todas as plataformas
-        tasks = []
-        for platform in platforms:
-            if platform == 'instagram':
-                tasks.append(self._search_instagram(query, max_results // len(platforms)))
-            elif platform == 'youtube':
-                tasks.append(self._search_youtube(query, max_results // len(platforms)))
-            elif platform == 'facebook':
-                tasks.append(self._search_facebook(query, max_results // len(platforms)))
+        # Processar posts do Instagram
+        for post in playwright_results.get('instagram_posts', []):
+            social_post = SocialPost(
+                platform='instagram',
+                post_id=f"ig_{hash(post.get('image_url', ''))}",
+                author='unknown',
+                content=post.get('description', ''),
+                likes=post.get('engagement_score', 0),
+                comments=0,
+                shares=0,
+                views=0,
+                engagement_rate=post.get('engagement_score', 0) / 100,
+                post_url=post.get('post_url', ''),
+                image_urls=[post.get('image_url', '')],
+                video_url=None,
+                hashtags=[],
+                mentions=[],
+                timestamp=datetime.now()
+            )
+            all_posts.append(social_post)
         
-        # Executar buscas em paralelo
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Processar posts do Facebook
+        for post in playwright_results.get('facebook_posts', []):
+            social_post = SocialPost(
+                platform='facebook',
+                post_id=f"fb_{hash(post.get('image_url', ''))}",
+                author='unknown',
+                content=post.get('description', ''),
+                likes=post.get('engagement_score', 0),
+                comments=0,
+                shares=0,
+                views=0,
+                engagement_rate=post.get('engagement_score', 0) / 100,
+                post_url=post.get('post_url', ''),
+                image_urls=[post.get('image_url', '')],
+                video_url=None,
+                hashtags=[],
+                mentions=[],
+                timestamp=datetime.now()
+            )
+            all_posts.append(social_post)
+        
+        # Processar vídeos do YouTube
+        for video in playwright_results.get('youtube_videos', []):
+            social_post = SocialPost(
+                platform='youtube',
+                post_id=f"yt_{hash(video.get('image_url', ''))}",
+                author='unknown',
+                content=video.get('title', ''),
+                likes=0,
+                comments=0,
+                shares=0,
+                views=video.get('views_estimate', 0),
+                engagement_rate=video.get('views_estimate', 0) / 1000,
+                post_url=video.get('video_url', ''),
+                image_urls=[video.get('image_url', '')],
+                video_url=video.get('video_url', ''),
+                hashtags=[],
+                mentions=[],
+                timestamp=datetime.now()
+            )
+            all_posts.append(social_post)
+        
+        # Filtrar por engajamento mínimo
+        filtered_posts = [p for p in all_posts if (p.likes + p.comments + p.shares + p.views) >= min_engagement]
+        
+        # Ordenar por engajamento
+        filtered_posts.sort(key=lambda x: x.engagement_rate, reverse=True)
+        
+        search_results = SearchResults(
+            query=query,
+            total_posts=len(filtered_posts),
+            total_images=sum(len(p.image_urls) for p in filtered_posts),
+            total_videos=len([p for p in filtered_posts if p.video_url]),
+            platforms=platform_counts,
+            posts=filtered_posts[:max_results],
+            profiles=[],
+            top_hashtags=[],
+            engagement_stats={},
+            search_timestamp=datetime.now()
+        )
+        
+        return search_results
         
         # Processar resultados
         for i, result in enumerate(results):
